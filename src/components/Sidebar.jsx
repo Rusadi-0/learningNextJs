@@ -1,152 +1,91 @@
+// src/components/Sidebar.jsx
+'use client' // Tambahkan ini agar bisa menggunakan usePathname
+
 import Link from "next/link";
+import { usePathname } from "next/navigation"; // Import hook untuk mendeteksi URL aktif
+import { Home, Settings, PackagePlus, ShoppingCart, AlertTriangle } from "lucide-react";
 
 export default function Sidebar() {
+  const pathname = usePathname(); // Ambil path URL saat ini (misal: '/kasir')
+
   return (
-    <div className="drawer-side is-drawer-close:overflow-visible">
+    <div className="drawer-side is-drawer-close:overflow-visible z-50 shadow">
       <label
         htmlFor="my-drawer-4"
         aria-label="close sidebar"
         className="drawer-overlay"
       ></label>
       
-      <div className="flex min-h-full flex-col items-start bg-base-200 is-drawer-close:w-14 is-drawer-open:w-64">
-        {/* Sidebar content */}
-        <ul className="menu w-full grow">
+      <div className="flex min-h-full flex-col items-start bg-base-200 is-drawer-close:w-14 is-drawer-open:w-64 transition-all duration-300">
+        <ul className="menu w-full grow space-y-1 p-2">
           
-          {/* Menu 1: Homepage (Mengarahkan ke '/') */}
+          {/* Menu 1: Homepage */}
           <li>
             <Link
               href="/"
-              className="is-drawer-close:tooltip is-drawer-close:tooltip-right"
+              // Jika pathname === '/' maka tambahkan class 'bg-primary text-primary-content' bawaan DaisyUI
+              className={`is-drawer-close:tooltip is-drawer-close:tooltip-right flex items-center gap-3 ${pathname === "/" ? "bg-primary text-primary-content" : ""}`}
               data-tip="Homepage"
             >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 24 24"
-                strokeLinejoin="round"
-                strokeLinecap="round"
-                strokeWidth="2"
-                fill="none"
-                stroke="currentColor"
-                className="my-1.5 inline-block size-4"
-              >
-                <path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"></path>
-                <path d="M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
-              </svg>
+              <Home className="my-1.5 inline-block size-5 shrink-0" />
               <span className="is-drawer-close:hidden">
                 Homepage
               </span>
             </Link>
           </li>
 
-          {/* Menu 2: Settings (Mengarahkan ke '/settings') */}
-          <li>
-            <Link
-              href="/settings"
-              className="is-drawer-close:tooltip is-drawer-close:tooltip-right"
-              data-tip="Settings"
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 24 24"
-                strokeLinejoin="round"
-                strokeLinecap="round"
-                strokeWidth="2"
-                fill="none"
-                stroke="currentColor"
-                className="my-1.5 inline-block size-4"
-              >
-                <path d="M20 7h-9"></path>
-                <path d="M14 17H5"></path>
-                <circle cx="17" cy="17" r="3"></circle>
-                <circle cx="7" cy="7" r="3"></circle>
-              </svg>
-              <span className="is-drawer-close:hidden">
-                Settings
-              </span>
-            </Link>
-          </li>
-
-          {/* Menu 3: Barang Masuk (Mengarahkan ke '/barang-masuk') */}
+          {/* Menu 2: Barang Masuk */}
           <li>
             <Link
               href="/barang-masuk"
-              className="is-drawer-close:tooltip is-drawer-close:tooltip-right"
+              className={`is-drawer-close:tooltip is-drawer-close:tooltip-right flex items-center gap-3 ${pathname === "/barang-masuk" ? "bg-primary text-primary-content" : ""}`}
               data-tip="Barang Masuk"
             >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 24 24"
-                strokeLinejoin="round"
-                strokeLinecap="round"
-                strokeWidth="2"
-                fill="none"
-                stroke="currentColor"
-                className="my-1.5 inline-block size-4"
-              >
-                <path d="M20 7h-9"></path>
-                <path d="M14 17H5"></path>
-                <circle cx="17" cy="17" r="3"></circle>
-                <circle cx="7" cy="7" r="3"></circle>
-              </svg>
+              <PackagePlus className="my-1.5 inline-block size-5 shrink-0" />
               <span className="is-drawer-close:hidden">
                 Barang Masuk
               </span>
             </Link>
           </li>
 
-          {/* Menu 4: Kasir (Mengarahkan ke '/kasir') */}
+          {/* Menu 3: Kasir */}
           <li>
             <Link
               href="/kasir"
-              className="is-drawer-close:tooltip is-drawer-close:tooltip-right"
+              className={`is-drawer-close:tooltip is-drawer-close:tooltip-right flex items-center gap-3 ${pathname === "/kasir" ? "bg-primary text-primary-content" : ""}`}
               data-tip="Kasir"
             >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 24 24"
-                strokeLinejoin="round"
-                strokeLinecap="round"
-                strokeWidth="2"
-                fill="none"
-                stroke="currentColor"
-                className="my-1.5 inline-block size-4"
-              >
-                <path d="M20 7h-9"></path>
-                <path d="M14 17H5"></path>
-                <circle cx="17" cy="17" r="3"></circle>
-                <circle cx="7" cy="7" r="3"></circle>
-              </svg>
+              <ShoppingCart className="my-1.5 inline-block size-5 shrink-0" />
               <span className="is-drawer-close:hidden">
                 Kasir
               </span>
             </Link>
           </li>
 
-          {/* Menu 4: Dashboard Expired (Mengarahkan ke '/dashboard-expired') */}
+          {/* Menu 4: Dashboard Expired */}
           <li>
             <Link
               href="/dashboard-expired"
-              className="is-drawer-close:tooltip is-drawer-close:tooltip-right"
+              className={`is-drawer-close:tooltip is-drawer-close:tooltip-right flex items-center gap-3 ${pathname === "/dashboard-expired" ? "bg-primary text-primary-content" : ""}`}
               data-tip="Dashboard Expired"
             >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 24 24"
-                strokeLinejoin="round"
-                strokeLinecap="round"
-                strokeWidth="2"
-                fill="none"
-                stroke="currentColor"
-                className="my-1.5 inline-block size-4"
-              >
-                <path d="M20 7h-9"></path>
-                <path d="M14 17H5"></path>
-                <circle cx="17" cy="17" r="3"></circle>
-                <circle cx="7" cy="7" r="3"></circle>
-              </svg>
+              <AlertTriangle className="my-1.5 inline-block size-5 shrink-0" />
               <span className="is-drawer-close:hidden">
                 Dashboard Expired
+              </span>
+            </Link>
+          </li>
+
+          {/* Menu 5: Settings */}
+          <li>
+            <Link
+              href="/settings"
+              className={`is-drawer-close:tooltip is-drawer-close:tooltip-right flex items-center gap-3 ${pathname === "/settings" ? "bg-primary text-primary-content" : ""}`}
+              data-tip="Settings"
+            >
+              <Settings className="my-1.5 inline-block size-5 shrink-0" />
+              <span className="is-drawer-close:hidden">
+                Settings
               </span>
             </Link>
           </li>

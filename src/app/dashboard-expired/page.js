@@ -3,12 +3,12 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { fetchLaporanExpired } from "./actions";
+import { AlertOctagon, AlertTriangle, Info, CheckCircle2 } from "lucide-react"; // Import ikon tambahan
 
 export default function DashboardExpiredPage() {
   const [laporan, setLaporan] = useState([]);
   const [isPending, startTransition] = useTransition();
 
-  // Fungsi fetch background tanpa membuat layar berkedip/kosong
   const refreshData = () => {
     startTransition(async () => {
       const data = await fetchLaporanExpired();
@@ -17,24 +17,32 @@ export default function DashboardExpiredPage() {
   };
 
   useEffect(() => {
-    // Muat data awal
     refreshData();
-
-    // Polling halus setiap 3 detik di background
     const interval = setInterval(() => {
       refreshData();
     }, 3000);
-
     return () => clearInterval(interval);
   }, []);
 
+  // Helper function untuk menentukan ikon berdasarkan sisa hari / status
+  const getStatusIcon = (sisaHari) => {
+    if (sisaHari <= 0) {
+      return <AlertOctagon className="size-4 shrink-0" />; // Expired
+    } else if (sisaHari <= 30) {
+      return <AlertTriangle className="size-4 shrink-0" />; // Kritis
+    } else if (sisaHari <= 90) {
+      return <Info className="size-4 shrink-0" />; // Waspada
+    } else {
+      return <CheckCircle2 className="size-4 shrink-0" />; // Aman
+    }
+  };
+
   return (
-    <div className="max-w-4xl mx-auto p-6 space-y-6">
+    <div className="max-w-5xl mx-auto p-6 space-y-6">
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">
             Dashboard Peringatan Expired
-            {/* Indicator Real-time animasi halus */}
             <span className="relative flex h-3 w-3">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75"></span>
               <span className="relative inline-flex rounded-full h-3 w-3 bg-success"></span>
@@ -53,7 +61,7 @@ export default function DashboardExpiredPage() {
       <div className="overflow-x-auto bg-base-200 rounded-box shadow-sm p-4">
         <table className="table table-zebra">
           <thead>
-            <tr>
+            <tr className="whitespace-nowrap">
               <th>ID Batch</th>
               <th>Nama Barang</th>
               <th>Tgl Expired</th>
@@ -71,21 +79,22 @@ export default function DashboardExpiredPage() {
               </tr>
             ) : (
               laporan.map((item) => (
-                <tr key={item.id_batch} className="transition-colors duration-300">
-                  <td className="font-mono text-xs">{item.id_batch}</td>
-                  <td className="font-semibold">{item.nama_barang}</td>
-                  <td>{item.tgl_expired}</td>
-                  <td>
+                <tr key={item.id_batch} className="transition-colors duration-300 hover:bg-base-300">
+                  <td className="font-mono text-xs whitespace-nowrap">{item.id_batch}</td>
+                  <td className="font-semibold whitespace-nowrap">{item.nama_barang}</td>
+                  <td className="whitespace-nowrap">{item.tgl_expired}</td>
+                  <td className="whitespace-nowrap">
                     <span className={item.sisa_hari <= 30 ? "text-error font-bold" : ""}>
                       {item.sisa_hari} hari lagi
                     </span>
                   </td>
-                  <td>
-                    <b className="text-primary text-base">{item.stok_sisa}</b> Pcs
+                  <td className="whitespace-nowrap">
+                    <b className="text-primary text-base">{item.stok_sisa}</b> <span className="text-xs">Pcs</span>
                   </td>
-                  <td>
-                    <span className={`badge ${item.warna_badge} font-medium`}>
-                      {item.status}
+                  <td className="min-w-[240px]">
+                    <span className={`badge ${item.warna_badge} font-medium text-xs h-auto py-1.5 px-3 leading-tight w-full flex items-center justify-center gap-1.5`}>
+                      {getStatusIcon(item.sisa_hari)}
+                      <span>{item.status}</span>
                     </span>
                   </td>
                 </tr>
