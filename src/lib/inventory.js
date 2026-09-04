@@ -99,20 +99,31 @@ function saveAllBatches(batches) {
 }
 
 // ==========================================
-// 6. ALGORITMA UTAMA KASIR: PEMOTONGAN FEFO
+// 6. ALGORITMA UTAMA KASIR: PEMOTONGAN FEFO (HANYA WASPADA & AMAN)
 // ==========================================
 export function prosesPenjualanFEFO(barcodeTarget, jumlahBeliPcs) {
-  const hariIni = new Date().toISOString().split('T')[0]; // Format: YYYY-MM-DD
+  const hariIni = new Date();
+  // Set jam ke 00:00:00 agar perhitungan selisih hari akurat
+  hariIni.setHours(0, 0, 0, 0);
+
   const semuaBatch = getBatchStok();
 
-  // 1. Filter batch yang sesuai barcode, stok > 0, dan belum expired
-  let batchValid = semuaBatch.filter(b => 
-    b.barcode === barcodeTarget && 
-    b.stok_sisa > 0 && 
-    b.tgl_expired >= hariIni
-  );
+  // 1. Filter batch yang sesuai barcode, stok > 0, DAN SISA HARI > 30 (Hanya WASPADA & AMAN)
+  let batchValid = semuaBatch.filter(b => {
+    if (b.barcode !== barcodeTarget || b.stok_sisa <= 0) return false;
 
-  // 2. Sortir FEFO: Dari tgl_expired PALING DEKAT (paling awal) ke PALING LAMA
+    const tglExp = new Date(b.tgl_expired);
+    tglExp.setHours(0, 0, 0, 0);
+    
+    const selisihWaktu = tglExp - hariIni;
+    const sisaHari = Math.ceil(selisihWaktu / (1000 * 60 * 60 * 24));
+
+    // Syarat utama: Hanya jual jika Sisa Hari > 30 (WASPADA 31-90 hari & AMAN >90 hari)
+    return sisaHari >= 0;
+    // return sisaHari > 30;
+  });
+
+  // 2. Sortir FEFO: Dari tgl_expired PALING DEKAT ke PALING LAMA
   batchValid.sort((a, b) => new Date(a.tgl_expired) - new Date(b.tgl_expired));
 
   let sisaKebutuhan = jumlahBeliPcs;
@@ -136,11 +147,10 @@ export function prosesPenjualanFEFO(barcodeTarget, jumlahBeliPcs) {
 
   // Jika stok total tidak mencukupi
   if (sisaKebutuhan > 0) {
-    throw new Error(`Stok tidak mencukupi! Kekurangan ${sisaKebutuhan} Pcs (Stok expired telah diabaikan).`);
+    throw new Error(`Stok layak jual tidak mencukupi! Kekurangan ${sisaKebutuhan} Pcs. (Stok berstatus Kritis & Kadaluarsa otomatis diabaikan Kasir).`);
   }
 
   // 4. Update kembali file CSV utama dengan data stok terbaru
-  // Map perubahan ke array utama
   const mapPerubahan = new Map(batchValid.map(b => [b.id_batch, b.stok_sisa]));
   const batchFinal = semuaBatch.map(b => {
     if (mapPerubahan.has(b.id_batch)) {
@@ -157,7 +167,6 @@ export function prosesPenjualanFEFO(barcodeTarget, jumlahBeliPcs) {
     rincian: rincianPemotongan
   };
 }
-
 
 // ==========================================
 // 7. DASHBOARD MONITORING EXPIRED (EWS) - FILTER STOK > 0
@@ -185,12 +194,15 @@ export function getLaporanStatusExpired() {
   }
 
   const hariIni = new Date();
+  hariIni.setHours(0, 0, 0, 0);
 
   return semuaBatch
-    .filter(batch => batch.stok_sisa > 0) // <-- HANYA TAMPILKAN BATCH YANG STOKNYA MASIH ADA (> 0)
+    .filter(batch => batch.stok_sisa > 0) // HANYA TAMPILKAN BATCH YANG STOKNYA MASIH ADA (> 0)
     .map(batch => {
       const cleanBarcode = batch.barcode ? batch.barcode.trim() : "";
       const tglExp = new Date(batch.tgl_expired);
+      tglExp.setHours(0, 0, 0, 0);
+
       const selisihWaktu = tglExp - hariIni;
       const sisaHari = Math.ceil(selisihWaktu / (1000 * 60 * 60 * 24));
 
