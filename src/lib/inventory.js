@@ -4,6 +4,7 @@ import path from 'path';
 
 const masterBarangPath = path.join(process.cwd(), 'master_barang.csv');
 const batchStokPath = path.join(process.cwd(), 'batch_stok.csv');
+const limitJual = 3; // Batas hari untuk status KRITIS (layak jual <= 30 hari)
 
 // Inisialisasi file CSV jika belum ada
 function initFiles() {
@@ -87,7 +88,7 @@ export function getBatchStok() {
 }
 
 // ==========================================
-// 5. UPDATE / SIMPAN KEMBALI FILE BATCH (Simulasi Database Save)
+// 5. UPDATE / SIMPAN KEMBALI FILE BATCH
 // ==========================================
 function saveAllBatches(batches) {
   initFiles();
@@ -103,12 +104,11 @@ function saveAllBatches(batches) {
 // ==========================================
 export function prosesPenjualanFEFO(barcodeTarget, jumlahBeliPcs) {
   const hariIni = new Date();
-  // Set jam ke 00:00:00 agar perhitungan selisih hari akurat
   hariIni.setHours(0, 0, 0, 0);
 
   const semuaBatch = getBatchStok();
 
-  // 1. Filter batch yang sesuai barcode, stok > 0, DAN SISA HARI > 30 (Hanya WASPADA & AMAN)
+  // 1. Filter batch yang sesuai barcode, stok > 0, DAN Sisa Hari >= 0 (Layak Jual)
   let batchValid = semuaBatch.filter(b => {
     if (b.barcode !== barcodeTarget || b.stok_sisa <= 0) return false;
 
@@ -118,9 +118,7 @@ export function prosesPenjualanFEFO(barcodeTarget, jumlahBeliPcs) {
     const selisihWaktu = tglExp - hariIni;
     const sisaHari = Math.ceil(selisihWaktu / (1000 * 60 * 60 * 24));
 
-    // Syarat utama: Hanya jual jika Sisa Hari > 30 (WASPADA 31-90 hari & AMAN >90 hari)
     return sisaHari >= 0;
-    // return sisaHari > 30;
   });
 
   // 2. Sortir FEFO: Dari tgl_expired PALING DEKAT ke PALING LAMA
@@ -212,7 +210,7 @@ export function getLaporanStatusExpired() {
       if (sisaHari <= 0) {
         status = "KADALUARSA (EXPIRED)";
         warnaBadge = "badge-error";
-      } else if (sisaHari <= 30) {
+      } else if (sisaHari <= 30) { // <= 30 hari
         status = "KRITIS (Segera Retur/Obral)";
         warnaBadge = "badge-error";
       } else if (sisaHari <= 90) {
@@ -222,7 +220,7 @@ export function getLaporanStatusExpired() {
 
       return {
         ...batch,
-        nama_barang: petaNamaBarang[cleanBarcode] || `Tidak Dikenal (${cleanBarcode})`,
+        nama_barang: petaNamaBarang[cleanBarcode] + ` (${cleanBarcode})` || `Tidak Dikenal (${cleanBarcode})`,
         sisa_hari: sisaHari,
         status: status,
         warna_badge: warnaBadge
@@ -231,7 +229,31 @@ export function getLaporanStatusExpired() {
 }
 
 // ==========================================
-// 8. MANAJEMEN KERANJANG (CART.CSV)
+// HELPER: HITUNG TOTAL STOK LAYAK JUAL (AMAN & WASPADA)
+// ==========================================
+export function getTotalStokLayakJual(barcodeTarget) {
+  const semuaBatch = getBatchStok();
+  const hariIni = new Date();
+  hariIni.setHours(0, 0, 0, 0);
+
+  let totalLayak = 0;
+  for (const b of semuaBatch) {
+    if (b.barcode === barcodeTarget && b.stok_sisa > 0) {
+      const tglExp = new Date(b.tgl_expired);
+      tglExp.setHours(0, 0, 0, 0);
+      const selisihHari = Math.ceil((tglExp - hariIni) / (1000 * 60 * 60 * 24));
+
+      // Hanya hitung jika status AMAN atau WASPADA (sisaHari > 30 atau sisaHari >= 0 tergantung kebijakan, di sini sisaHari >= 0 dan bukan Kritis <= 30)
+      if (selisihHari > limitJual) { // Sesuai aturan AMAN & WASPADA (> 30 hari)
+        totalLayak += b.stok_sisa;
+      }
+    }
+  }
+  return totalLayak;
+}
+
+// ==========================================
+// 8. MANAJEMEN KERANJANG (CART.CSV) DENGAN VALIDASI STOK
 // ==========================================
 const cartPath = path.join(process.cwd(), 'cart.csv');
 
@@ -257,12 +279,15 @@ export function getCartItems() {
       const satuan = cols[2];
 
       const master = getMasterBarangByBarcode(barcode);
+      const totalStokSisa = getTotalStokLayakJual(barcode);
+
       items.push({
         barcode,
         nama_barang: master ? master.nama_barang : `Tidak Dikenal (${barcode})`,
         jumlah,
         satuan,
-        isi_per_dus: master ? master.isi_per_dus : 1
+        isi_per_dus: master ? master.isi_per_dus : 1,
+        stok_sisa_layak: totalStokSisa // Dikirim ke frontend untuk batas tombol plus
       });
     }
   }
@@ -274,8 +299,27 @@ export function tambahItemCart(barcodeTarget, jumlahTambah, satuanTarget) {
   const barang = getMasterBarangByBarcode(barcodeTarget);
   if (!barang) throw new Error("Barang tidak terdaftar di master!");
 
+  const totalStokLayak = getTotalStokLayakJual(barcodeTarget);
+  if (totalStokLayak <= 0) {
+    throw new Error(`Stok barang "${barang.nama_barang}" habis atau berstatus Kritis/Expired!`);
+  }
+
+  const isiPerDus = barang.isi_per_dus || 1;
+  const jumlahTambahPcs = satuanTarget === 'Dus' ? jumlahTambah * isiPerDus : jumlahTambah;
+
   let items = getCartItems();
   const existing = items.find(i => i.barcode === barcodeTarget && i.satuan === satuanTarget);
+  
+  let currentQtyPcsInCart = 0;
+  if (existing) {
+    currentQtyPcsInCart = existing.satuan === 'Dus' ? existing.jumlah * isiPerDus : existing.jumlah;
+  }
+
+  const totalRequirementPcs = currentQtyPcsInCart + jumlahTambahPcs;
+
+  if (totalRequirementPcs > totalStokLayak) {
+    throw new Error(`Stok tidak mencukupi! Sisa stok layak jual hanya ${totalStokLayak} Pcs.`);
+  }
 
   if (existing) {
     existing.jumlah += jumlahTambah;
@@ -287,7 +331,6 @@ export function tambahItemCart(barcodeTarget, jumlahTambah, satuanTarget) {
     });
   }
 
-  // Simpan kembali ke cart.csv
   let content = 'barcode,jumlah,satuan\n';
   for (const item of items) {
     content += `"${item.barcode}",${item.jumlah},"${item.satuan}"\n`;
@@ -320,7 +363,6 @@ export function checkoutCartFEFO() {
 
   const rincianTotal = [];
 
-  // Proses FEFO untuk setiap item di cart.csv
   for (const item of items) {
     let jumlahPcs = item.jumlah;
     if (item.satuan === 'Dus') {
@@ -335,7 +377,77 @@ export function checkoutCartFEFO() {
     });
   }
 
-  // Jika semua berhasil dipotong, kosongkan cart.csv
   clearCartCSV();
   return rincianTotal;
+}
+
+// ==========================================
+// UPDATE KUANTITAS ITEM CART (PLUS / MINUS DENGAN VALIDASI STOK)
+// ==========================================
+export function updateQtyCartItem(barcodeTarget, delta) {
+  initCartFile();
+  let items = getCartItems();
+  const targetItem = items.find(i => i.barcode === barcodeTarget);
+
+  if (targetItem) {
+    const barang = getMasterBarangByBarcode(barcodeTarget);
+    const isiPerDus = barang ? barang.isi_per_dus || 1 : 1;
+    const totalStokLayak = getTotalStokLayakJual(barcodeTarget);
+
+    const newJumlah = targetItem.jumlah + delta;
+    const newJumlahPcs = targetItem.satuan === 'Dus' ? newJumlah * isiPerDus : newJumlah;
+
+    if (delta > 0 && newJumlahPcs > totalStokLayak) {
+      throw new Error(`Mencapai batas stok sisa! Stok layak jual tersedia: ${totalStokLayak} Pcs.`);
+    }
+
+    targetItem.jumlah = newJumlah;
+  }
+
+  // Filter out item yang jumlahnya <= 0
+  items = items.filter(i => i.jumlah > 0);
+
+  let content = 'barcode,jumlah,satuan\n';
+  for (const item of items) {
+    content += `"${item.barcode}",${item.jumlah},"${item.satuan}"\n`;
+  }
+  fs.writeFileSync(cartPath, content, 'utf-8');
+  return getCartItems();
+}
+
+// ==========================================
+// UPDATE KUANTITAS EKSAK (DIRECT EDIT)
+// ==========================================
+export function updateExactQtyCartItem(barcodeTarget, exactJumlah) {
+  initCartFile();
+  let items = getCartItems();
+  const targetItem = items.find(i => i.barcode === barcodeTarget);
+
+  if (targetItem) {
+    const barang = getMasterBarangByBarcode(barcodeTarget);
+    const isiPerDus = barang ? barang.isi_per_dus || 1 : 1;
+    const totalStokLayak = getTotalStokLayakJual(barcodeTarget);
+
+    const newJumlah = parseInt(exactJumlah) || 1;
+    if (newJumlah <= 0) {
+      return hapusItemCart(barcodeTarget);
+    }
+
+    const newJumlahPcs = targetItem.satuan === 'Dus' ? newJumlah * isiPerDus : newJumlah;
+
+    if (newJumlahPcs > totalStokLayak) {
+      throw new Error(`Kuantitas melebihi stok sisa! Stok layak jual tersedia: ${totalStokLayak} Pcs.`);
+    }
+
+    targetItem.jumlah = newJumlah;
+  }
+
+  items = items.filter(i => i.jumlah > 0);
+
+  let content = 'barcode,jumlah,satuan\n';
+  for (const item of items) {
+    content += `"${item.barcode}",${item.jumlah},"${item.satuan}"\n`;
+  }
+  fs.writeFileSync(cartPath, content, 'utf-8');
+  return getCartItems();
 }

@@ -6,11 +6,27 @@ import {
   tambahItemCart, 
   hapusItemCart, 
   getCartItems, 
-  checkoutCartFEFO 
+  checkoutCartFEFO,
+  updateQtyCartItem 
 } from "@/lib/inventory";
 import { revalidatePath } from "next/cache";
 
-// Action untuk mengambil isi keranjang saat ini dari cart.csv
+// Action Update Qty (+1 / -1)
+export async function updateQtyCartAction(barcode, delta) {
+  try {
+    const updatedCart = updateQtyCartItem(barcode, delta);
+    revalidatePath("/kasir");
+    return { success: true, cart: updatedCart };
+  } catch (error) {
+    return { 
+      success: false, 
+      cart: getCartItems(), 
+      message: error.message || "Gagal memperbarui kuantitas." 
+    };
+  }
+}
+
+// Action Fetch Cart Item
 export async function fetchCartAction() {
   try {
     const cart = getCartItems();
@@ -20,7 +36,7 @@ export async function fetchCartAction() {
   }
 }
 
-// 1. Tambah ke Cart CSV
+// Action Tambah ke Cart CSV (Scan / Form Submit)
 export async function tambahCartAction(prevState, formData) {
   const barcode = formData.get("barcode");
   const jumlah = parseInt(formData.get("jumlah")) || 1;
@@ -28,7 +44,7 @@ export async function tambahCartAction(prevState, formData) {
 
   try {
     const barang = getMasterBarangByBarcode(barcode);
-    if (!barang) throw new Error("Barang tidak terdaftar di master!");
+    if (!barang) throw new Error(`Barang dengan barcode "${barcode}" tidak terdaftar di master!`);
 
     const updatedCart = tambahItemCart(barcode, jumlah, satuan);
     revalidatePath("/kasir");
@@ -47,7 +63,7 @@ export async function tambahCartAction(prevState, formData) {
   }
 }
 
-// 2. Hapus Item dari Cart CSV
+// Action Hapus Item Cart
 export async function hapusCartAction(barcode) {
   try {
     const updatedCart = hapusItemCart(barcode);
@@ -58,7 +74,7 @@ export async function hapusCartAction(barcode) {
   }
 }
 
-// 3. Eksekusi Checkout FEFO dari Cart CSV
+// Action Checkout FEFO
 export async function checkoutAction(prevState, formData) {
   try {
     const rincian = checkoutCartFEFO();
@@ -76,6 +92,24 @@ export async function checkoutAction(prevState, formData) {
       success: false,
       message: error.message || "Gagal melakukan checkout.",
       cart: getCartItems()
+    };
+  }
+}
+
+// Tambahan di src/app/kasir/actions.js
+import { updateExactQtyCartItem } from "@/lib/inventory";
+
+// Action untuk edit langsung jumlah kuantitas
+export async function updateExactQtyCartAction(barcode, exactJumlah) {
+  try {
+    const updatedCart = updateExactQtyCartItem(barcode, exactJumlah);
+    revalidatePath("/kasir");
+    return { success: true, cart: updatedCart };
+  } catch (error) {
+    return { 
+      success: false, 
+      cart: getCartItems(), 
+      message: error.message || "Gagal memperbarui kuantitas." 
     };
   }
 }
