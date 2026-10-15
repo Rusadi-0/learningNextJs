@@ -229,3 +229,113 @@ export function getLaporanStatusExpired() {
       };
     }).sort((a, b) => a.sisa_hari - b.sisa_hari);
 }
+
+// ==========================================
+// 8. MANAJEMEN KERANJANG (CART.CSV)
+// ==========================================
+const cartPath = path.join(process.cwd(), 'cart.csv');
+
+function initCartFile() {
+  if (!fs.existsSync(cartPath)) {
+    fs.writeFileSync(cartPath, 'barcode,jumlah,satuan\n', 'utf-8');
+  }
+}
+
+export function getCartItems() {
+  initCartFile();
+  const content = fs.readFileSync(cartPath, 'utf-8');
+  const lines = content.trim().split('\n');
+  const items = [];
+
+  for (let i = 1; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line) continue;
+    const cols = line.split(',').map(c => c.replace(/^"|"$/g, ''));
+    if (cols.length >= 3) {
+      const barcode = cols[0];
+      const jumlah = parseInt(cols[1]) || 0;
+      const satuan = cols[2];
+
+      const master = getMasterBarangByBarcode(barcode);
+      items.push({
+        barcode,
+        nama_barang: master ? master.nama_barang : `Tidak Dikenal (${barcode})`,
+        jumlah,
+        satuan,
+        isi_per_dus: master ? master.isi_per_dus : 1
+      });
+    }
+  }
+  return items;
+}
+
+export function tambahItemCart(barcodeTarget, jumlahTambah, satuanTarget) {
+  initCartFile();
+  const barang = getMasterBarangByBarcode(barcodeTarget);
+  if (!barang) throw new Error("Barang tidak terdaftar di master!");
+
+  let items = getCartItems();
+  const existing = items.find(i => i.barcode === barcodeTarget && i.satuan === satuanTarget);
+
+  if (existing) {
+    existing.jumlah += jumlahTambah;
+  } else {
+    items.push({
+      barcode: barcodeTarget,
+      jumlah: jumlahTambah,
+      satuan: satuanTarget
+    });
+  }
+
+  // Simpan kembali ke cart.csv
+  let content = 'barcode,jumlah,satuan\n';
+  for (const item of items) {
+    content += `"${item.barcode}",${item.jumlah},"${item.satuan}"\n`;
+  }
+  fs.writeFileSync(cartPath, content, 'utf-8');
+  return getCartItems();
+}
+
+export function hapusItemCart(barcodeTarget) {
+  initCartFile();
+  let items = getCartItems().filter(i => i.barcode !== barcodeTarget);
+  
+  let content = 'barcode,jumlah,satuan\n';
+  for (const item of items) {
+    content += `"${item.barcode}",${item.jumlah},"${item.satuan}"\n`;
+  }
+  fs.writeFileSync(cartPath, content, 'utf-8');
+  return getCartItems();
+}
+
+export function clearCartCSV() {
+  initCartFile();
+  fs.writeFileSync(cartPath, 'barcode,jumlah,satuan\n', 'utf-8');
+}
+
+// Checkout seluruh isi cart.csv menggunakan Algoritma FEFO
+export function checkoutCartFEFO() {
+  const items = getCartItems();
+  if (items.length === 0) throw new Error("Keranjang belanja masih kosong!");
+
+  const rincianTotal = [];
+
+  // Proses FEFO untuk setiap item di cart.csv
+  for (const item of items) {
+    let jumlahPcs = item.jumlah;
+    if (item.satuan === 'Dus') {
+      jumlahPcs = item.jumlah * item.isi_per_dus;
+    }
+
+    const hasil = prosesPenjualanFEFO(item.barcode, jumlahPcs);
+    rincianTotal.push({
+      barcode: item.barcode,
+      nama_barang: item.nama_barang,
+      rincian_potong: hasil.rincian
+    });
+  }
+
+  // Jika semua berhasil dipotong, kosongkan cart.csv
+  clearCartCSV();
+  return rincianTotal;
+}
